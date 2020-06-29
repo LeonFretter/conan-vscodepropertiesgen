@@ -1,43 +1,57 @@
 from conans.model import Generator
 from conans.paths import BUILD_INFO
 from conans import ConanFile
-
+from os import path
 from collections import OrderedDict
+import pprint
 
 import json
 
 class VSCodeProperties(Generator):
-
-    def _makeConfigEntry(self, config_name, default_include_path, deps_include_path):
-        entry = OrderedDict()
-        entry["name"] = config_name
-        entry["includePath"] = [default_include_path]
-        entry["includePath"].extend(deps_include_path)
-
-        browse = OrderedDict()
-        browse["limitSymbolsToIncludedHeaders"] = True
-        browse["databaseFilename"] = ""
-        entry["browse"] = browse
-
-        return entry
-
     @property
     def filename(self):
-        return ".vscode/c_cpp_properties.json"
+        file_path = self.getPropFilePath()
+        print("\nfile_path from filename: ", file_path)
+        return file_path
 
     @property
     def content(self):
-        configurations = []
-        configurations.append(self._makeConfigEntry("Mac", "/usr/include", self.deps_build_info.include_paths))
-        configurations.append(self._makeConfigEntry("Linux", "/usr/include", self.deps_build_info.include_paths))
-        configurations.append(self._makeConfigEntry("Win32", "/usr/include", self.deps_build_info.include_paths))
+        file_path = self.getPropFilePath()
 
-        config = {"configurations": configurations}
-        config["configurations"] = configurations
-        return json.dumps(config, indent = 4)
+        if not path.isfile(file_path):
+            raise Exception("Please create a basic .vscode/c_cpp_properties.json first")
+        else:
+            config_file = open(file_path)
+            json_config = json.load(config_file)
 
-class VisualStuioCodePropertiesGenerator(ConanFile):
-    name = "vscodepropertiesgen"
+            include_paths = json_config["configurations"][0]["includePath"]
+            dependency_include_paths = self.deps_build_info.include_paths
+
+            if type(include_paths) == str:
+                include_paths = list(include_paths)
+
+            if type(dependency_include_paths) == str:
+                dependency_include_paths = list(dependency_include_paths)
+
+            dependency_include_paths.append("/usr/include")
+
+            for dependency in dependency_include_paths:
+                if dependency not in include_paths:
+                    include_paths.append(dependency)
+
+            json_config["configurations"][0]["includePath"] = include_paths
+
+            return json.dumps(json_config, indent=4)
+
+    def getPropFilePath(self) -> str:
+        project_dir =  path.dirname(self.output_path)
+        path_to_file = path.join(project_dir, ".vscode/c_cpp_properties.json")
+
+        return path_to_file
+
+
+class VSCodePropGen(ConanFile):
+    name = "code_cpp_props"
     version = "0.1"
     description = "Simple visual studio code C/C++ extension property generator"
     url = "https://github.com/mkovalchik/conan-vscodepropertiesgen"
